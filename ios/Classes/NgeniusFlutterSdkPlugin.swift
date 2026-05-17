@@ -1,17 +1,20 @@
 import Flutter
 import UIKit
+import PassKit
 import NISdk
 
-public class NgeniusFlutterSdkPlugin: NSObject, FlutterPlugin, CardPaymentDelegate {
+public class NgeniusFlutterSdkPlugin: NSObject, FlutterPlugin, CardPaymentDelegate, ApplePayDelegate {
 
     private var methodChannel: FlutterMethodChannel!
     private var resultCallback: FlutterResult?
+    private var paymentRequest: PKPaymentRequest?
 
     // MARK: - Error Enum
     enum NGeniusFlutterError: String {
         case invalidArguments = "INVALID_ARGUMENTS"
         case noRootViewController = "NO_ROOT_VIEW_CONTROLLER"
         case orderParsingFailed = "ORDER_RESPONSE_ERROR"
+        case applePayFailed = "APPLE_PAY_ERROR"
         case authorizationFailed = "AUTHORIZATION_FAILED"
         case paymentFailed = "PAYMENT_FAILED"
         case unknown = "UNKNOWN_ERROR"
@@ -46,6 +49,13 @@ public class NgeniusFlutterSdkPlugin: NSObject, FlutterPlugin, CardPaymentDelega
                 return
             }
             launchSavedCardPayment(args: args, result: result)
+
+        case "launchApplePay":
+            guard let args = call.arguments as? [String: Any] else {
+                result(NGeniusFlutterError.invalidArguments.flutterError(message: "Arguments are missing or invalid"))
+                return
+            }
+            launchApplePay(args: args, result: result)
 
         default:
             result(FlutterMethodNotImplemented)
@@ -128,6 +138,65 @@ public class NgeniusFlutterSdkPlugin: NSObject, FlutterPlugin, CardPaymentDelega
         }
     }
 
+    // MARK: - APPLE PAY
+    private func launchApplePay(args: [String: Any], result: @escaping FlutterResult) {
+        self.resultCallback = result
+
+        guard let merchantId = args["merchantId"] as? String, !merchantId.isEmpty else {
+            result(NGeniusFlutterError.invalidArguments.flutterError(message: "Missing merchantId"))
+            return
+        }
+
+        guard let orderResponseMap = args["orderJsonObject"] as? [String: Any],
+              let items = args["purchasedItems"] as? [[String: Any]],
+              let paymentAmount = args["paymentAmount"] as? Double else {
+            result(NGeniusFlutterError.invalidArguments.flutterError(message: "Missing Apple Pay order details or items"))
+            return
+        }
+
+        guard let viewController = UIApplication.shared.keyWindow?.rootViewController else {
+            result(NGeniusFlutterError.noRootViewController.flutterError(message: "Root view controller is not available"))
+            return
+        }
+
+        do {
+            let jsonData = try JSONSerialization.data(withJSONObject: orderResponseMap, options: [])
+            let orderResponse = try JSONDecoder().decode(OrderResponse.self, from: jsonData)
+
+            let paymentRequest = PKPaymentRequest()
+            paymentRequest.merchantIdentifier = merchantId
+            paymentRequest.countryCode = "AE"
+            paymentRequest.currencyCode = "AED"
+            paymentRequest.requiredShippingContactFields = [.postalAddress, .emailAddress, .phoneNumber]
+            paymentRequest.requiredBillingContactFields = [.postalAddress, .name]
+            paymentRequest.merchantCapabilities = [.capabilityDebit, .capabilityCredit, .capability3DS]
+
+            var summaryItems: [PKPaymentSummaryItem] = []
+
+            for item in items {
+                guard let label = item["label"] as? String, let amount = item["amount"] as? Double else {
+                    result(NGeniusFlutterError.invalidArguments.flutterError(message: "Invalid item format in purchasedItems"))
+                    return
+                }
+                summaryItems.append(PKPaymentSummaryItem(label: label, amount: NSDecimalNumber(value: amount)))
+            }
+
+            summaryItems.append(PKPaymentSummaryItem(label: "Total", amount: NSDecimalNumber(value: paymentAmount)))
+            paymentRequest.paymentSummaryItems = summaryItems
+            self.paymentRequest = paymentRequest
+
+            NISdk.sharedInstance.initiateApplePayWith(
+                applePayDelegate: self,
+                cardPaymentDelegate: self,
+                overParent: viewController,
+                for: orderResponse,
+                with: paymentRequest
+            )
+
+        } catch let error {
+            result(NGeniusFlutterError.applePayFailed.flutterError(message: "Apple Pay initialization failed: \(error.localizedDescription)"))
+        }
+    }
 
     // MARK: - UI FIX
     private func removeButtonText(from view: UIView) {

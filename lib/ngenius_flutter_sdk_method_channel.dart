@@ -44,6 +44,28 @@ class MethodChannelNgeniusFlutterSdk extends NgeniusFlutterSdkPlatform {
   }
 
   @override
+  Future<NGeniusResponseModel> launchApplePay({
+    required String merchantId,
+    required Map<String, dynamic> orderJsonObject,
+    required List<Map<String, dynamic>> purchasedItems,
+    required double paymentAmount,
+  }) async {
+    try {
+      final args = {
+        "merchantId": merchantId,
+        "orderJsonObject": orderJsonObject,
+        "purchasedItems": purchasedItems,
+        "paymentAmount": paymentAmount,
+      };
+
+      dynamic response = await methodChannel.invokeMethod("launchApplePay", args);
+      return NGeniusResponseModel.fromJson(json: jsonDecode(response));
+    } catch (err) {
+      return NGeniusResponseModel(message: err.toString());
+    }
+  }
+
+  @override
   Future<NGeniusResponseModel> launchGooglePay({
     required String merchantGatewayId,
     required Map<String, dynamic> orderJsonObject,

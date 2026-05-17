@@ -217,6 +217,65 @@ class NgeniusGooglePayExample extends StatelessWidget {
 }
 ```
 
+#### **Example Implementation for Using Apple Pay**
+
+> **Note:** Apple Pay is supported on **iOS only**. The `purchasedItems` list represents the line items shown in the Apple Pay sheet — each item needs a `label` and an `amount`. The `paymentAmount` is the final total. Like other methods, `createOrder` is **your own API call** to your backend and is not part of this plugin.
+
+```dart
+class NgeniusApplePayExample extends StatelessWidget {
+  const NgeniusApplePayExample({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('N-Genius Apple Pay Example'),
+      ),
+      body: Center(
+        child: ElevatedButton(
+            onPressed: () async {
+              // 1. Call YOUR backend/API to create the order.
+              // This is not part of the plugin — you are responsible for
+              // implementing this API call following the N-Genius documentation:
+              // https://docs.ngenius-payments.com/reference/two-stage-payments-orders
+              final Map<String, dynamic> orderJsonObject = await yourApiService.createOrder(
+                amountValue: 10.50,
+                currency: "AED",
+              );
+
+              // 2. Define your line items shown in the Apple Pay sheet
+              final List<Map<String, dynamic>> purchasedItems = [
+                {"label": "Product 1", "amount": 5.00},
+                {"label": "Product 2", "amount": 5.50},
+              ];
+
+              // 3. Launch Apple Pay
+              final ngeniusFlutterSdk = NgeniusFlutterSdk();
+              NGeniusResponseModel ngeniusResponse = await ngeniusFlutterSdk.launchApplePay(
+                merchantId: "merchant.com.yourapp", // Your Apple Pay merchant ID
+                orderJsonObject: orderJsonObject,
+                purchasedItems: purchasedItems,
+                paymentAmount: 10.50, // Must match the total of purchasedItems
+              );
+
+              if (context.mounted) {
+                if (ngeniusResponse.message == "PAYMENT_SUCCESSFUL") {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Transaction Successful")));
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(
+                          "Transaction Failed :: code :: ${ngeniusResponse.code} :: message :: ${ngeniusResponse.message}")));
+                }
+              }
+            },
+            child: Text("Launch Apple Pay")),
+      ),
+    );
+  }
+}
+```
+
+
 ### **Passing the Order JSON Object to `launchCardPayment` Method**
 
 To pass the `orderJsonObject` to the `launchCardPayment` method, you need to provide it against the `orderJsonObject` key. To get the `orderJsonObject`, you must first call two APIs. It is recommended to call these APIs on the server-side, not on the mobile side, for security and performance reasons.

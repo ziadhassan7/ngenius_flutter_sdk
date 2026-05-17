@@ -17,6 +17,20 @@ class NgeniusFlutterSdk {
         .launchSavedCardPayment(orderJsonObject: orderJsonObject, cvv: cvv);
   }
 
+  Future<NGeniusResponseModel> launchApplePay({
+    required String merchantId,
+    required Map<String, dynamic> orderJsonObject,
+    required List<Map<String, dynamic>> purchasedItems,
+    required double paymentAmount,
+  }) {
+    return NgeniusFlutterSdkPlatform.instance.launchApplePay(
+      merchantId: merchantId,
+      orderJsonObject: orderJsonObject,
+      purchasedItems: purchasedItems,
+      paymentAmount: paymentAmount,
+    );
+  }
+
   Future<NGeniusResponseModel> launchGooglePay({
     required String merchantGatewayId,
     required Map<String, dynamic> orderJsonObject,
