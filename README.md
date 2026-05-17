@@ -104,6 +104,69 @@ class NgeniusExample extends StatelessWidget {
 }
 ```
 
+#### **Example Implementation for Using Saved Cards**
+
+> **Note:** The key difference when using a saved card is in the **order creation step**. You must pass a `savedCard` object (`NGeniusSavedCardModel`) in your `createOrder` request body. If `recaptureCsc` is set to `true`, the user will be prompted to enter their CVV — you can skip this by passing the `cvv` directly to `launchSavedCardPayment`.
+
+```dart
+class NgeniusSavedCardExample extends StatelessWidget {
+  const NgeniusSavedCardExample({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('N-Genius Saved Card Example'),
+      ),
+      body: Center(
+        child: ElevatedButton(
+            onPressed: () async {
+              // 1. Build your saved card model from your stored card data
+              final savedCard = NGeniusSavedCardModel(
+                maskedPan: "400555******0001",
+                expiry: "2025-12",
+                cardholderName: "John Doe",
+                scheme: "VISA",
+                cardToken: "your-card-token",
+                recaptureCsc: true, // true = user will be prompted for CVV
+              );
+
+              // 2. Call YOUR backend/API to create the order.
+              // This is not part of the plugin — you are responsible for
+              // implementing this API call following the N-Genius documentation:
+              // https://docs.ngenius-payments.com/reference/two-stage-payments-orders
+              // The savedCard object must be included in the request body.
+              final Map<String, dynamic> orderJsonObject = await yourApiService.createOrder(
+                amountValue: 10.50,
+                currency: "AED",
+                savedCard: savedCard,
+              );
+
+              // 3. Launch saved card payment
+              // Pass cvv to skip the CVV page, or omit it to let the user enter it
+              final ngeniusFlutterSdk = NgeniusFlutterSdk();
+              NGeniusResponseModel ngeniusResponse = await ngeniusFlutterSdk.launchSavedCardPayment(
+                orderJsonObject: orderJsonObject,
+                cvv: "123", // Optional: only needed if you want to bypass recaptureCsc
+              );
+
+              if (context.mounted) {
+                if (ngeniusResponse.message == "PAYMENT_SUCCESSFUL") {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Transaction Successful")));
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(
+                          "Transaction Failed :: code :: ${ngeniusResponse.code} :: message :: ${ngeniusResponse.message}")));
+                }
+              }
+            },
+            child: Text("Launch Saved Card Payment")),
+      ),
+    );
+  }
+}
+```
+
 ### **Passing the Order JSON Object to `launchCardPayment` Method**
 
 To pass the `orderJsonObject` to the `launchCardPayment` method, you need to provide it against the `orderJsonObject` key. To get the `orderJsonObject`, you must first call two APIs. It is recommended to call these APIs on the server-side, not on the mobile side, for security and performance reasons.

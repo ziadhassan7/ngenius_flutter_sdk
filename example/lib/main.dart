@@ -1,11 +1,6 @@
-import 'dart:developer';
-
 import 'package:flutter/material.dart';
-import 'dart:async';
-
-import 'package:flutter/services.dart';
+import 'package:ngenius_flutter_sdk/models/ngenius_response_model.dart';
 import 'package:ngenius_flutter_sdk/ngenius_flutter_sdk.dart';
-import 'package:ngenius_flutter_sdk/ngenius_response_model.dart';
 
 void main() {
   runApp(const MyApp());
