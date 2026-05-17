@@ -22,6 +22,13 @@ import org.json.JSONObject
 import java.util.HashMap
 import com.google.gson.Gson
 
+import payment.sdk.android.googlepay.GooglePayConfig
+import payment.sdk.android.payments.PaymentsLauncher
+import payment.sdk.android.payments.PaymentsRequest
+import payment.sdk.android.payments.PaymentsResult
+
+
+
 /** NgeniusFlutterSdkPlugin */
 class NgeniusFlutterSdkPlugin: FlutterPlugin, MethodCallHandler, ActivityAware, PluginRegistry.ActivityResultListener {
 
@@ -29,6 +36,7 @@ class NgeniusFlutterSdkPlugin: FlutterPlugin, MethodCallHandler, ActivityAware, 
   private lateinit var paymentClient: PaymentClient
   private var activity: Activity? = null
   private var pendingResult: Result? = null
+  private lateinit var paymentsLauncher: PaymentsLauncher
 
   companion object {
     private const val CARD_PAYMENT_REQUEST_CODE = 123
@@ -123,6 +131,50 @@ class NgeniusFlutterSdkPlugin: FlutterPlugin, MethodCallHandler, ActivityAware, 
       }
 
 
+      // ===========================
+      // Google Pay Implementation
+      // ===========================
+      "launchGooglePay" -> {
+        try {
+          // 1. Get required arguments from Flutter
+          val jsonData = call.argument<HashMap<String, Any>>("orderJsonObject")
+            ?: throw IllegalArgumentException("orderJsonObject is required")
+
+          val links = jsonData["_links"] as? HashMap<String, Any>
+            ?: throw Exception("_links not found in orderJsonObject")
+
+          val authUrl = ((links["payment-authorization"] as? HashMap<String, Any>)?.get("href") as? String)
+            ?: throw Exception("Authorization URL not found in orderJsonObject")
+
+          val paymentUrl = ((links["payment"] as? HashMap<String, Any>)?.get("href") as? String)
+            ?: throw Exception("Payment URL not found in orderJsonObject")
+
+          val merchantGatewayId = call.argument<String>("merchantGatewayId")
+            ?: throw IllegalArgumentException("Merchant Gateway ID is required")
+
+          // 2. Create GooglePayConfig using the constructor
+          val googlePayConfig = GooglePayConfig(
+            environment = GooglePayConfig.Environment.Test, // or .Production
+            merchantGatewayId = merchantGatewayId
+          )
+
+          // 3. Build PaymentsRequest
+          val paymentsRequest = PaymentsRequest.builder()
+            .gatewayAuthorizationUrl(authUrl)
+            .payPageUrl(paymentUrl)
+            .setGooglePayConfig(googlePayConfig)
+            .build()
+
+          // 4. Create PaymentsLauncher and launch
+          pendingResult = result
+          paymentsLauncher.launch(paymentsRequest)
+
+        } catch (e: Exception) {
+          result.error("GOOGLE_PAY_ERROR", e.message ?: "Unknown error occurred during Google Pay launch", null)
+        }
+      }
+
+
       else -> result.notImplemented()
     }
   }
@@ -132,8 +184,19 @@ class NgeniusFlutterSdkPlugin: FlutterPlugin, MethodCallHandler, ActivityAware, 
     channel.setMethodCallHandler(null)
   }
 
+
   override fun onAttachedToActivity(binding: ActivityPluginBinding) {
     activity = binding.activity
+
+    // Initialize PaymentsLauncher (for Google Pay)
+    val componentActivity = activity as? ComponentActivity
+      ?: throw IllegalStateException("Activity must be a ComponentActivity." +
+              " in Flutter in your MainActivity extend FlutterFragmentActivity")
+
+    paymentsLauncher = PaymentsLauncher(componentActivity) { paymentsResult ->
+      handlePaymentResult(paymentsResult)
+    }
+
     binding.addActivityResultListener(this)
   }
 
@@ -148,6 +211,48 @@ class NgeniusFlutterSdkPlugin: FlutterPlugin, MethodCallHandler, ActivityAware, 
   override fun onDetachedFromActivityForConfigChanges() {
     onDetachedFromActivity()
   }
+
+  private fun handlePaymentResult(paymentsResult: PaymentsResult) {
+    val ngeniusResponse = when (paymentsResult) {
+      is PaymentsResult.Success -> mapOf(
+        "code" to 200, //"PAYMENT_SUCCESSFUL",
+        "reason" to "Payment completed successfully"
+      )
+      is PaymentsResult.Authorised -> mapOf(
+        "code" to 201, //"PAYMENT_AUTHORISED",
+        "reason" to "Payment authorised successfully"
+      )
+      is PaymentsResult.PostAuthReview -> mapOf(
+        "code" to 203, //"POST_AUTH_REVIEW",
+        "reason" to "Payment requires post-authorization review"
+      )
+      is PaymentsResult.PartialAuthDeclined -> mapOf(
+        "code" to 204, //"PARTIAL_AUTH_DECLINED",
+        "reason" to "Partial authorization was declined"
+      )
+      is PaymentsResult.PartialAuthDeclineFailed -> mapOf(
+        "code" to 205, //"PARTIAL_AUTH_DECLINE_FAILED",
+        "reason" to "Partial authorization reversal failed"
+      )
+      is PaymentsResult.PartiallyAuthorised -> mapOf(
+        "code" to 206, //"PARTIALLY_AUTHORISED",
+        "reason" to "Payment partially authorised"
+      )
+      is PaymentsResult.Failed -> mapOf(
+        "code" to 400, //"PAYMENT_FAILED",
+        "reason" to paymentsResult.error
+      )
+      is PaymentsResult.Cancelled -> mapOf(
+        "code" to 401, //"CANCELLED_BY_USER",
+        "reason" to "User cancelled the payment"
+      )
+    }
+
+    val jsonString = JSONObject(ngeniusResponse).toString()
+    pendingResult?.success(jsonString)
+    pendingResult = null
+  }
+
 
   @Override
   override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {

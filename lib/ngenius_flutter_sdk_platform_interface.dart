@@ -34,4 +34,10 @@ abstract class NgeniusFlutterSdkPlatform extends PlatformInterface {
     throw UnimplementedError("launchSavedCardPayment() has not been implemented.");
   }
 
+  Future<NGeniusResponseModel> launchGooglePay({
+    required String merchantGatewayId,
+    required Map<String, dynamic> orderJsonObject,
+  }) async {
+    throw UnimplementedError("launchGooglePay() has not been implemented.");
+  }
 }

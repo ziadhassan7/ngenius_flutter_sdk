@@ -167,6 +167,56 @@ class NgeniusSavedCardExample extends StatelessWidget {
 }
 ```
 
+#### **Example Implementation for Using Google Pay**
+
+> **Note:** Google Pay is currently supported on **Android only**. Similar to saved cards, `createOrder` is **your own API call** to your backend — it is not part of this plugin. Once you have the order, pass it along with your `merchantGatewayId` to `launchGooglePay`.
+
+```dart
+class NgeniusGooglePayExample extends StatelessWidget {
+  const NgeniusGooglePayExample({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('N-Genius Google Pay Example'),
+      ),
+      body: Center(
+        child: ElevatedButton(
+            onPressed: () async {
+              // 1. Call YOUR backend/API to create the order.
+              // This is not part of the plugin — you are responsible for
+              // implementing this API call following the N-Genius documentation:
+              // https://docs.ngenius-payments.com/reference/two-stage-payments-orders
+              final Map<String, dynamic> orderJsonObject = await yourApiService.createOrder(
+                amountValue: 10.50,
+                currency: "AED",
+              );
+
+              // 2. Launch Google Pay
+              final ngeniusFlutterSdk = NgeniusFlutterSdk();
+              NGeniusResponseModel ngeniusResponse = await ngeniusFlutterSdk.launchGooglePay(
+                orderJsonObject: orderJsonObject,
+                merchantGatewayId: "YOUR-GOOGLE-MID",
+              );
+
+              if (context.mounted) {
+                if (ngeniusResponse.code == 200 || ngeniusResponse.code == 201) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Transaction Successful")));
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(
+                          "Transaction Failed :: code :: ${ngeniusResponse.code} :: message :: ${ngeniusResponse.message}")));
+                }
+              }
+            },
+            child: Text("Launch Google Pay")),
+      ),
+    );
+  }
+}
+```
+
 ### **Passing the Order JSON Object to `launchCardPayment` Method**
 
 To pass the `orderJsonObject` to the `launchCardPayment` method, you need to provide it against the `orderJsonObject` key. To get the `orderJsonObject`, you must first call two APIs. It is recommended to call these APIs on the server-side, not on the mobile side, for security and performance reasons.
